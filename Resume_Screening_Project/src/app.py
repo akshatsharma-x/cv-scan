@@ -475,7 +475,7 @@ body {{ font-family: 'Inter', sans-serif; background: {bg}; color: {text_col}; o
 @keyframes bounce {{ 0%,100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-4px); }} }}
 
 /* Hide the hidden trigger button using modern CSS :has selector */
-div[data-testid="stButton"]:has(p:contains("trigger_rerun_xyz")) {{
+div[data-testid="stButton"]:has(p:contains("trigger_rerun")) {{
     display: none !important;
 }}
 </style>
@@ -488,7 +488,7 @@ function selectMode(mode) {{
     
     // 2. Click the hidden Streamlit button to trigger Python rerun and state update
     const btns = Array.from(window.parent.document.querySelectorAll('button'));
-    const rerunBtn = btns.find(b => b.innerText.includes('trigger_rerun_xyz'));
+    const rerunBtn = btns.find(b => b.innerText.includes('trigger_rerun'));
     if (rerunBtn) rerunBtn.click();
 
     // 3. Open sidebar if it is closed, with a slight delay to avoid Streamlit race condition
