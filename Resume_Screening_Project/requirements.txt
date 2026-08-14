@@ -1,0 +1,11 @@
+pandas
+scikit-learn
+sentence-transformers
+nltk
+matplotlib
+seaborn
+plotly
+PyPDF2
+python-docx
+joblib
+streamlit
