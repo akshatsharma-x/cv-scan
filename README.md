@@ -10,7 +10,7 @@ The system operates by extracting text from candidate resumes and mapping them i
 2. Text Preprocessing: Using the NLTK library, the text is cleaned by converting it to lowercase, removing punctuation and stop-words, and applying lemmatization to reduce words to their base forms.
 3. Feature Extraction and Scoring:
    - Basic Scan (Keyword Matching): Uses Term Frequency-Inverse Document Frequency (TF-IDF) to convert the text into numerical vectors. This measures the presence and frequency of exact keywords shared between the resume and the JD.
-   - Advanced Scan (Semantic Matching): Uses a pre-trained BERT language model (specifically, all-MiniLM-L6-v2 via SentenceTransformers) to create deep contextual embeddings. This captures the underlying meaning of the resume, even if exact keywords aren't used. A Hybrid Score is then calculated by combining the TF-IDF score (weighted at 30%) and the BERT semantic score (weighted at 70%).
+   - Advanced Scan (Semantic Matching): Uses a pre-trained BERT language model (specifically, all-MiniLM-L6-v2 via SentenceTransformers) to create deep contextual embeddings. This captures the underlying meaning of the resume, even if exact keywords aren't used. A Hybrid Score is then calculated by combining the TF-IDF score (weighted at 30%) and the BERT semantic score (weighted at 70%).  
 
 ## Project Structure
 
