@@ -1,0 +1,23 @@
+# Runtime dependencies — used locally and by Streamlit Community Cloud.
+#
+# CPU-only PyTorch: the default Linux wheel pulls in ~2.5 GB of CUDA libraries
+# that this app never uses (all-MiniLM-L6-v2 runs comfortably on CPU).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+
+# Dashboard
+streamlit>=1.67        # top navigation, persist_state, light/dark theme sections
+plotly>=5.19           # rounded bar ends (barcornerradius)
+
+# NLP / ML — versions pinned where the trained artifacts in models/ depend on them
+numpy>=2.0,<3
+pandas>=3.0,<4         # pool / demo data are pandas-3 pickles
+scipy
+scikit-learn==1.9.1    # TF-IDF vectorizer and classifier were pickled with this version
+sentence-transformers>=3.0
+nltk>=3.8
+joblib
+
+# Document parsing
+pypdf>=4.0             # successor of the deprecated PyPDF2
+python-docx>=1.0

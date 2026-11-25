@@ -1,0 +1,39 @@
+# CV-Scan theme — custom light & dark palettes.
+# Users switch between them from the app menu (⋮ → System / Light / Dark);
+# "System" follows the OS appearance.
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap, monospace"
+baseRadius = "12px"
+buttonRadius = "12px"
+showWidgetBorder = true
+
+[theme.dark]
+primaryColor = "#8b7cf6"
+backgroundColor = "#0b0d14"
+secondaryBackgroundColor = "#151826"
+textColor = "#e7e9f2"
+borderColor = "#262a3d"
+dataframeBorderColor = "#22263a"
+dataframeHeaderBackgroundColor = "#131623"
+linkColor = "#a99df9"
+# Validated categorical order (blue, orange, aqua, …) — dark-surface steps.
+chartCategoricalColors = ["#338ced", "#e76624", "#00a888", "#d28e05", "#e24d8b", "#0aac23", "#9887ef", "#eb6263"]
+chartSequentialColors = ["#0e3d7e", "#0f4a96", "#1757ac", "#1b64be", "#2370cd", "#257de0", "#338ced", "#519ced", "#6aabf1", "#9dc8f7"]
+
+[theme.light]
+primaryColor = "#5b4cdb"
+backgroundColor = "#f6f7fb"
+secondaryBackgroundColor = "#eceef6"
+textColor = "#161927"
+borderColor = "#dcdfea"
+dataframeBorderColor = "#e3e6ef"
+dataframeHeaderBackgroundColor = "#f0f2f8"
+linkColor = "#4c3fc7"
+chartCategoricalColors = ["#257de0", "#f47230", "#00b894", "#f2a600", "#ee7fac", "#008a17", "#6a4ce2", "#ec4647"]
+chartSequentialColors = ["#cce3fd", "#b6d5f8", "#9dc8f7", "#84b9f3", "#6aabf1", "#519ced", "#338ced", "#2370cd", "#1757ac", "#0e3d7e"]

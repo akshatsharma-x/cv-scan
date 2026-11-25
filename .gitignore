@@ -20,3 +20,7 @@ __pycache__/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Tooling
+.pytest_cache/
+*.log

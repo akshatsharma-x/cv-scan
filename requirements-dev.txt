@@ -1,0 +1,4 @@
+# Development extras: tests and report figures (not needed to run or deploy the app).
+-r requirements.txt
+matplotlib   # generate_plots.py / evaluate_classifiers.py
+pytest

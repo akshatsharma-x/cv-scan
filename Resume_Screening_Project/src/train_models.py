@@ -1,102 +1,154 @@
 """
-train_models.py — One-time script to build and persist all ML artifacts.
+train_models.py — Build and persist every artifact the dashboard needs.
 
-Run this once:
-    python src/train_models.py
+Run once from the repository root (paths are resolved relative to this file):
+    python Resume_Screening_Project/src/train_models.py              # train + evaluate
+    python Resume_Screening_Project/src/train_models.py --skip-eval
 
-It will:
-  1. Load the CSV dataset.
-  2. Clean resume text.
-  3. Fit TF-IDF vectorizer + MinMaxScaler.
-  4. Generate BERT embeddings for the historical dataset.
-  5. Save everything to the  models/  directory via joblib.
+Steps
+  1. Load ../dataset/Resume/Resume.csv (2,484 resumes, 24 categories).
+  2. Hold out 5 resumes per category; they are never seen by any model and are
+     used as demo candidates and for the JD → resume ranking benchmark.
+  3. Clean the pool text for TF-IDF (utils.clean_text).
+  4. Embed the pool with Sentence-BERT using chunked mean pooling.
+  5. Train the category classifier (calibrated linear SVM on [TF-IDF | BERT]).
+  6. Save artifacts + metadata to ../models and run the evaluation suite.
 """
 
+from __future__ import annotations
+
+import argparse
+import json
 import os
 import sys
-import pandas as pd
-import numpy as np
+import time
+from datetime import datetime, timezone
+
 import joblib
+import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
+from sklearn.svm import LinearSVC
 
-# Add parent for utils import
 sys.path.insert(0, os.path.dirname(__file__))
-from utils import advanced_clean_text, ensure_nltk_resources
+from engine import (  # noqa: E402
+    BERT_MODEL_NAME, CHUNK_WORDS, MODEL_DIR, TFIDF_PARAMS, ScreeningEngine,
+    embed_documents, hybrid_features, load_bert_model,
+)
+from evaluation import CLASSIFIER_TFIDF_PARAMS, DEFAULT_C, run_full_evaluation  # noqa: E402
+from sample_data import SAMPLE_JOBS  # noqa: E402
+from utils import clean_text, ensure_nltk_resources, resume_title, word_count  # noqa: E402
 
-# ── CONFIG ──────────────────────────────────────────────
-DATASET_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "dataset", "Resume", "Resume.csv")
-MODEL_DIR    = os.path.join(os.path.dirname(__file__), "..", "models")
-SUBSET_SIZE  = 100  # Use first N resumes (same as notebook demo)
-
-# ── SAMPLE JD (used to fit the scaler during training) ──
-SAMPLE_JD = """
-We are looking for a Human Resources Specialist with experience in recruitment,
-benefits administration, and employee relations. Candidates should have strong
-communication skills, experience with HR software, and a background in payroll management.
-"""
+DATASET_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "dataset", "Resume", "Resume.csv")
+)
+HOLDOUT_PER_CATEGORY = 5
+SEED = 42
 
 
-def main():
+def load_dataset(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    text_col = "Resume_str" if "Resume_str" in df.columns else "resume_text"
+    df = df.rename(columns={text_col: "text"})[["ID", "text", "Category"]]
+    df["text"] = df["text"].fillna("").astype(str)
+    before = len(df)
+    df = df[df["text"].str.strip().str.len() > 0]
+    df = df.drop_duplicates(subset="text").reset_index(drop=True)
+    print(f"   {before:,} rows → {len(df):,} after removing empty / duplicate resumes")
+    return df
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--skip-eval", action="store_true", help="skip the (≈1–2 min) evaluation suite")
+    args = parser.parse_args()
+
+    t_start = time.time()
     ensure_nltk_resources()
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    # 1. Load dataset
-    print(f"📂 Loading dataset from {os.path.abspath(DATASET_PATH)} ...")
-    df = pd.read_csv(DATASET_PATH)
-    print(f"   Shape: {df.shape}")
+    print(f"📂 Loading dataset from {DATASET_PATH}")
+    df = load_dataset(DATASET_PATH)
 
-    if "Resume_str" in df.columns:
-        df["resume_text"] = df["Resume_str"]
-
-    # Grab 45 resumes equally from every professional Category
-    # Guaranteeing a perfectly uniform distribution of classes for the SVM evaluation
-    print("⚖️ Balancing class distribution...")
-    resume_subset = df.groupby('Category').head(45).copy()
-
-    # 2. Clean text
-    print("🧹 Cleaning text …")
-    cleaned_jd = advanced_clean_text(SAMPLE_JD)
-    resume_subset["cleaned_resume"] = resume_subset["resume_text"].apply(advanced_clean_text)
-
-    # 3. TF-IDF
-    print("📊 Fitting TF-IDF vectorizer …")
-    all_texts = [cleaned_jd] + resume_subset["cleaned_resume"].tolist()
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(all_texts)
-    resume_subset["tfidf_score"] = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
-
-    # 4. BERT embeddings
-    print("🤖 Encoding with BERT (all-MiniLM-L6-v2) …")
-    bert_model = SentenceTransformer("all-MiniLM-L6-v2")
-    jd_embedding = bert_model.encode([cleaned_jd])
-    resume_embeddings = bert_model.encode(resume_subset["cleaned_resume"].tolist(), show_progress_bar=True)
-    resume_subset["bert_score"] = cosine_similarity(jd_embedding, resume_embeddings).flatten()
-
-    # 5. Normalize & Hybrid
-    print("⚙️  Normalizing scores …")
-    scaler = MinMaxScaler()
-    resume_subset[["tfidf_norm", "bert_norm"]] = scaler.fit_transform(
-        resume_subset[["tfidf_score", "bert_score"]]
+    print(f"🧪 Holding out {HOLDOUT_PER_CATEGORY} resumes per category …")
+    holdout = (
+        df.groupby("Category", group_keys=False)
+        .sample(n=HOLDOUT_PER_CATEGORY, random_state=SEED)
+        .reset_index(drop=True)
     )
-    resume_subset["hybrid_score"] = (0.3 * resume_subset["tfidf_norm"]) + (0.7 * resume_subset["bert_norm"])
+    pool = df[~df["ID"].isin(holdout["ID"])].reset_index(drop=True)
+    print(f"   pool: {len(pool):,} resumes · hold-out: {len(holdout)} resumes")
 
-    # Ensure ID column
-    if "ID" not in resume_subset.columns:
-        resume_subset["ID"] = resume_subset.index.astype(str)
+    print("🧹 Cleaning text (URLs, e-mails, punctuation, stop-words, lemmatisation) …")
+    pool["clean_text"] = pool["text"].map(clean_text)
+    pool["word_count"] = pool["text"].map(word_count)
+    pool["title"] = pool["text"].map(resume_title)
 
-    # 6. Save artifacts
-    print("💾 Saving model artifacts …")
-    joblib.dump(vectorizer,        os.path.join(MODEL_DIR, "tfidf_vectorizer.pkl"))
-    joblib.dump(scaler,            os.path.join(MODEL_DIR, "minmax_scaler.pkl"))
-    joblib.dump(tfidf_matrix,      os.path.join(MODEL_DIR, "dataset_tfidf_matrix.pkl"))
-    joblib.dump(resume_embeddings, os.path.join(MODEL_DIR, "dataset_bert_embeddings.pkl"))
-    resume_subset.to_pickle(       os.path.join(MODEL_DIR, "processed_resume_dataset.pkl"))
+    print(f"🤖 Embedding the pool with {BERT_MODEL_NAME} ({CHUNK_WORDS}-word chunks → [mean ‖ first chunk]) …")
+    bert = load_bert_model()
+    t0 = time.time()
+    embeddings = embed_documents(bert, pool["text"].tolist(), show_progress=True)
+    print(f"   {embeddings.shape} in {time.time() - t0:.0f}s")
 
-    print("\n✅ All models saved to:", os.path.abspath(MODEL_DIR))
-    print("   You can now run:  streamlit run src/app.py")
+    print("🏷️  Training the category classifier (calibrated linear SVM on TF-IDF ⊕ BERT) …")
+    class_vectorizer = TfidfVectorizer(**CLASSIFIER_TFIDF_PARAMS).fit(pool["clean_text"])
+    classifier = CalibratedClassifierCV(LinearSVC(C=DEFAULT_C, max_iter=5000, random_state=SEED), cv=5, ensemble=False)
+    classifier.fit(hybrid_features(class_vectorizer, pool["clean_text"], embeddings), pool["Category"])
+
+    print("💾 Saving artifacts …")
+    pool[["ID", "Category", "title", "word_count", "clean_text"]].to_pickle(
+        os.path.join(MODEL_DIR, "processed_resume_dataset.pkl")
+    )
+    joblib.dump(embeddings, os.path.join(MODEL_DIR, "dataset_bert_embeddings.pkl"))
+    joblib.dump(class_vectorizer, os.path.join(MODEL_DIR, "tfidf_vectorizer.pkl"))
+    joblib.dump(classifier, os.path.join(MODEL_DIR, "category_classifier.pkl"))
+    holdout[["ID", "Category", "text"]].to_pickle(os.path.join(MODEL_DIR, "demo_resumes.pkl"))
+
+    import sentence_transformers
+    import sklearn
+
+    metadata = {
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "dataset": "Resume.csv (Kaggle resume dataset, 24 categories)",
+        "n_resumes": int(len(pool)),
+        "n_holdout": int(len(holdout)),
+        "n_categories": int(pool["Category"].nunique()),
+        "categories": sorted(pool["Category"].unique().tolist()),
+        "category_counts": pool["Category"].value_counts().sort_index().to_dict(),
+        "bert_model": BERT_MODEL_NAME,
+        "embedding_dim": int(embeddings.shape[1]),
+        "model_dim": int(embeddings.shape[1] // 2),
+        "embedding_views": ["length-weighted mean of 150-word chunks", "first chunk (title & summary)"],
+        "chunk_words": CHUNK_WORDS,
+        "tfidf_match_params": {k: str(v) for k, v in TFIDF_PARAMS.items()},
+        "tfidf_classifier_vocabulary": int(len(class_vectorizer.vocabulary_)),
+        "classifier": f"CalibratedClassifierCV(LinearSVC(C={DEFAULT_C}), method='sigmoid', cv=5, ensemble=False)",
+        "versions": {"scikit-learn": sklearn.__version__, "sentence-transformers": sentence_transformers.__version__},
+    }
+    with open(os.path.join(MODEL_DIR, "metadata.json"), "w", encoding="utf-8") as fh:
+        json.dump(metadata, fh, indent=2)
+
+    # Obsolete artifacts from the previous pipeline.
+    for stale in ("minmax_scaler.pkl", "dataset_tfidf_matrix.pkl"):
+        path = os.path.join(MODEL_DIR, stale)
+        if os.path.exists(path):
+            os.remove(path)
+
+    if not args.skip_eval:
+        print("📊 Running the evaluation suite …")
+        engine = ScreeningEngine(MODEL_DIR, bert_model=bert)
+        results = run_full_evaluation(engine, holdout, SAMPLE_JOBS)
+        results["created_at"] = metadata["created_at"]
+        with open(os.path.join(MODEL_DIR, "evaluation_results.json"), "w", encoding="utf-8") as fh:
+            json.dump(results, fh, indent=2)
+        hybrid80 = results["classification"]["per_split"]["Hybrid"]["80%"]
+        ranking = results["ranking"]["summary"]["Hybrid"]
+        print(f"   Hybrid classifier @80% split: accuracy {hybrid80['Accuracy']:.3f}, "
+              f"F1 {hybrid80['F1-Score']:.3f}, MCC {hybrid80['MCC']:.3f}")
+        print(f"   Hybrid ranking: ROC-AUC {ranking['ROC-AUC']:.3f}, P@5 {ranking['P@5']:.3f}")
+
+    print(f"\n✅ Done in {time.time() - t_start:.0f}s — artifacts in {MODEL_DIR}")
+    print("   Launch the dashboard with:  streamlit run Resume_Screening_Project/src/app.py")
 
 
 if __name__ == "__main__":
