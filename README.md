@@ -2,6 +2,8 @@
 
 CV-Scan ranks candidate resumes against a job description (JD) and explains every score. It combines **TF-IDF keyword matching** with **Sentence-BERT semantic matching** into a calibrated **hybrid score**, compares each candidate against 2,361 historical resumes scored for the same job, and predicts each resume's professional domain. It ships as a Streamlit dashboard with custom light and dark themes.
 
+![CV-Scan home page: hero, live stats and scan modes](docs/screenshots/home.png)
+
 ## Features
 
 - **Batch screening.** Upload several PDF, DOCX (including tables) or TXT resumes and get a ranked leaderboard you can export as CSV. You can also add held-out sample resumes and pick from 24 built-in sample job descriptions.
@@ -17,6 +19,23 @@ CV-Scan ranks candidate resumes against a job description (JD) and explains ever
   - confusion matrices
   - a hyper-parameter (C) sweep showing training vs validation accuracy
   - a JD → resume ranking benchmark on held-out resumes
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/results.png" alt="Ranked leaderboard in the dark theme"><br><sub><b>Ranked leaderboard</b>: hybrid, keyword and semantic scores, pool rank and predicted domain for every candidate.</sub></td>
+    <td width="50%"><img src="docs/screenshots/results-light.png" alt="Ranked leaderboard in the light theme"><br><sub><b>Light theme</b>: switch between light and dark from the ⋮ menu (System / Light / Dark).</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/deep-dive.png" alt="Candidate deep-dive with keyword insights"><br><sub><b>Explainable scores</b>: each term's share of the keyword score, plus the job's key requirements found and missing.</sub></td>
+    <td width="50%"><img src="docs/screenshots/benchmark.png" alt="Pool benchmark tab"><br><sub><b>Pool benchmark</b>: the candidate against 2,361 historical resumes scored for the same job.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/semantic-map.png" alt="Semantic map of the applicant pool"><br><sub><b>Semantic map</b>: PCA of the Sentence-BERT space, coloured by match score (2D and interactive 3D).</sub></td>
+    <td width="50%"><img src="docs/screenshots/evaluation.png" alt="Model evaluation page"><br><sub><b>Model evaluation</b>: Table 3 and key measures for TF-IDF, BERT and the hybrid, computed from this pipeline.</sub></td>
+  </tr>
+</table>
 
 ## How it works
 
@@ -61,6 +80,8 @@ The hybrid is best at every training split from 50 % to 90 % (accuracy 0.774 →
 | Semantic (BERT) | 0.882 | 0.525 | 0.802 | 0.644 |
 | **Hybrid (30/70)** | **0.892** | **0.575** | **0.832** | **0.666** |
 
+![Ranking quality by engine and the hybrid-weight sweep](docs/screenshots/ranking-benchmark.png)
+
 A sweep of the hybrid weight shows that 30 % keyword gives the best Precision@5. The **Model evaluation** page also has the full per-split curves, confusion matrices and the C sweep.
 
 ## Project structure
@@ -83,6 +104,7 @@ Resume_Screening_Project/
 evaluate_classifiers.py        Re-runs the evaluation, regenerates fig9–11.png, prints Table 3
 generate_plots.py              Re-draws fig9–11.png from models/evaluation_results.json
 dataset/                       Resume.csv + original PDFs by category (only needed for training)
+docs/screenshots/              Screenshots used in this README
 ```
 
 ## Installation and usage
