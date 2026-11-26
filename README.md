@@ -1,5 +1,9 @@
 # CV-Scan: AI-Powered Resume Screener
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://cv-scangit-sx3ikzevbggbmbdryzkftk.streamlit.app)
+
+**Live demo:** https://cv-scangit-sx3ikzevbggbmbdryzkftk.streamlit.app
+
 CV-Scan ranks candidate resumes against a job description (JD) and explains every score. It combines **TF-IDF keyword matching** with **Sentence-BERT semantic matching** into a calibrated **hybrid score**, compares each candidate against 2,361 historical resumes scored for the same job, and predicts each resume's professional domain. It ships as a Streamlit dashboard with custom light and dark themes.
 
 ![CV-Scan home page: hero, live stats and scan modes](docs/screenshots/home.png)
